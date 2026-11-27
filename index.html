@@ -448,7 +448,7 @@ cv.addEventListener("pointermove", e => {
     return;
   }
   if (!drag || drag.id !== e.pointerId) return;
-  state.ay += (e.clientX - drag.x) * 0.45;
+  state.ay -= (e.clientX - drag.x) * 0.45; // 横方向は「掴んで引く」向き（右へ引くと手前の面が右へ付いてくる）
   state.ax += (e.clientY - drag.y) * 0.45;
   drag.x = e.clientX; drag.y = e.clientY;
   pushHist(e.timeStamp, e.clientX, e.clientY);
@@ -470,7 +470,7 @@ function endPointer(e, flick) {
       let rest = null;
       for (const s of dragHist) if (s.t <= cut) rest = s;
       if (!rest) rest = dragHist[dragHist.length - 1];
-      state.ay += (rest.x - drag.x) * 0.45;
+      state.ay -= (rest.x - drag.x) * 0.45;
       state.ax += (rest.y - drag.y) * 0.45;
       // 投げ：静止位置が新しい（＝止まってから時間が経っていない）ときだけ初速を付ける
       if (flick && e.timeStamp - rest.t <= 100) {
@@ -479,7 +479,7 @@ function endPointer(e, flick) {
         const dtm = rest.t - s0.t;
         if (dtm >= 30) {
           const clamp = v => Math.max(-FLICK_MAX, Math.min(FLICK_MAX, v));
-          inertia.y = clamp((rest.x - s0.x) / dtm * 1000 * 0.45);
+          inertia.y = clamp(-(rest.x - s0.x) / dtm * 1000 * 0.45);
           inertia.x = clamp((rest.y - s0.y) / dtm * 1000 * 0.45);
           if (Math.abs(inertia.x) < 25) inertia.x = 0; // 弱すぎる投げは付けない
           if (Math.abs(inertia.y) < 25) inertia.y = 0;
