@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>3D ROOM</title>
+<style>
+  * { box-sizing: border-box; }
+  html,body { margin:0; padding:0; background:#050508; color:#ddd; font-family: monospace; }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 16px 12px 28px; }
+  h1 { font-size: 16px; letter-spacing: .15em; color:#7db8ff; margin: 4px 0 10px; font-weight: bold; }
+  .note { font-size: 12px; color:#999; line-height:1.7; margin-bottom:10px; }
+  canvas#screen { display:block; width:100%; max-width:768px; aspect-ratio: 768 / 448; background:#000;
+    border:1px solid #223; image-rendering: pixelated; cursor: grab; touch-action:none; margin:0 auto; }
+  canvas#screen:active { cursor: grabbing; }
+  .stage { position: relative; max-width: 768px; margin: 0 auto; }
+  .fsbtn { position: absolute; top: 8px; right: 8px; z-index: 2; background: rgba(16,16,24,.72); font-size: 12px; padding: 6px 10px; }
+  canvas#screen:fullscreen { width: 100%; height: 100%; max-width: none; object-fit: contain; background: #000; border: none; }
+  .panel { max-width:768px; margin:12px auto 0; display:flex; flex-direction:column; gap:10px; }
+  .btnGrid { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
+  .stopbtn { background:#22262e; color:#e8e8e8; border:1px solid #3a3f4a; border-radius:6px; padding:4px 8px; cursor:pointer; font-size:11px; flex:none; }
+  .stopbtn.on { background:#5a2b2b; color:#ffb3b3; border-color:#a05555; }
+  .sect { font-size:11px; color:#7d8aa0; letter-spacing:.2em; margin-top:2px; }
+  button, select { font-family: monospace; font-size:14px; background:#101018; color:#a9ccff;
+    border:1px solid #335; padding:9px 6px; cursor:pointer; border-radius:4px; }
+  button:hover, select:hover { background:#1a1a2c; }
+  button.on { background:#234; color:#fff; border-color:#7db8ff; }
+  button.editbtn { background:#2a2008; color:#ffd77d; border-color:#a07c2c; }
+  button.editbtn:hover { background:#3d2e0d; }
+  #editPanel button { background:#2a2008; color:#ffd77d; border-color:#a07c2c; }
+  #editPanel button:hover { background:#3d2e0d; }
+  #editPanel button.on { background:#6b4e12; color:#fff2cc; border-color:#ffd77d; }
+  #editPanel button:disabled { opacity:.45; }
+  .row { display:flex; gap:8px; align-items:center; background:#0b0b12; border:1px solid #223; padding:7px 9px; border-radius:4px; }
+  .row label { font-size:12px; color:#8fb6ee; white-space:nowrap; }
+  .row input[type=range] { flex:1; min-width:0; }
+  .row label { min-width:2em; }
+  .row .val { font-size:13px; color:#fff; min-width:3.2em; text-align:right; }
+  .help { max-width:768px; margin:12px auto 0; font-size:12px; color:#888; line-height:1.9; }
+  b.k { color:#a9ccff; font-weight:normal; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>3D ROOM</h1>
+
+  <div class="stage">
+    <canvas id="screen" width="768" height="448"></canvas>
+    <button class="fsbtn" id="btnFs">全画面</button>
+    <div id="tip" style="display:none; position:absolute; z-index:3; pointer-events:none; background:rgba(10,10,18,.92); border:1px solid #456; color:#cfe4ff; font-size:12px; padding:4px 8px; border-radius:4px; white-space:nowrap;"></div>
+  </div>
+
+  <div class="panel">
+    <div class="btnGrid">
+      <button id="btnPattern">パターン：0</button>
+      <button id="btnColor">カラー：0</button>
+      <button id="btnReset">リセット</button>
+      <button id="btnSmooth">なめらか：無効</button>
+      <button id="btnDepth">奥行き：0</button>
+      <button id="btnBg">背景：0</button>
+      <button id="btnEdit" class="editbtn">座標編集</button>
+    </div>
+    <div class="row" id="rowSpd0"><label>XD</label><button class="stepbtn" id="spdDec0">＜</button><input id="spd0" type="range" min="-128" max="127" step="1" value="0"><button class="stepbtn" id="spdInc0">＞</button><button class="stopbtn" id="spdStop0">STOP</button><span class="val" id="spdVal0">0</span></div>
+    <div class="row sel" id="rowSpd1"><label>YD</label><button class="stepbtn" id="spdDec1">＜</button><input id="spd1" type="range" min="-128" max="127" step="1" value="1"><button class="stepbtn" id="spdInc1">＞</button><button class="stopbtn" id="spdStop1">STOP</button><span class="val" id="spdVal1">+1</span></div>
+    <div class="row" id="rowSpd2"><label>ZD</label><button class="stepbtn" id="spdDec2">＜</button><input id="spd2" type="range" min="-128" max="127" step="1" value="0"><button class="stepbtn" id="spdInc2">＞</button><button class="stopbtn" id="spdStop2">STOP</button><span class="val" id="spdVal2">0</span></div>
+    <div class="row"><label>ZOOM</label><input id="zoom" type="range" min="1" max="242" value="143"><span class="val" id="zoomVal">100</span></div>
+  </div>
+
+  <div class="panel" id="editPanel" style="display:none;">
+    <div class="sect">― 編集モード（パターン <span id="editPatNum">0</span>）―</div>
+    <div class="btnGrid">
+      <button id="btnViewX">X軸表示</button>
+      <button id="btnViewY">Y軸表示</button>
+      <button id="btnViewZ">Z軸表示</button>
+    </div>
+    <div class="row"><label id="selInfo">ボール未選択</label></div>
+    <div class="row"><label>X</label><input id="numX" type="number" min="-255" max="255" step="1"><label>Y</label><input id="numY" type="number" min="-255" max="255" step="1"><label>Z</label><input id="numZ" type="number" min="-255" max="255" step="1"><label><input id="accChk" type="checkbox"> アクセント</label></div>
+    <div class="row"><label>グリッド</label><input id="gridSize" type="number" min="1" max="255" step="1" value="25"><label><input id="gridSnap" type="checkbox" checked> グリッドに合わせる</label></div>
+    <div class="btnGrid">
+      <button id="btnUndo">元に戻す</button>
+      <button id="btnRedo">やり直し</button>
+      <button id="btnResetPts">初期値に戻す</button>
+      <button id="btnSaveExit">保存して終了</button>
+      <button id="btnDiscard">破棄して終了</button>
+    </div>
+  </div>
+
+  <div class="help">
+    操作説明<br>
+    ↑:PATTERN<br>
+    ↓:COLOR<br>
+    RUN(Enter):COORD<br>
+    ←→:SPEED(選択されているCOORDが対象)<br>
+    SEL(Shift):STOP(選択されているCOORDが対象)<br>
+    I(Z) / II(X):ZOOM
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ============================================================
+   陰影ボールは「スプライト事前描画」方式。
+   - 起動時に色×陰影段階ぶんのボールを小さいオフスクリーンCanvasに描く
+   - 毎フレームは drawImage で拡大縮小して並べるだけ
+   陰影は radial gradient（中心を左上にずらす＝光源左上）を
+   ハードな段差つきにして、ドット絵っぽく量子化している。
+   ============================================================ */
+/* ============================================================
+   座標と色の規則は原作の解析で判明した仕様を使い、ボールの絵は
+   原作ピクセルを使わず陰影の構造だけから自前で描き直している
+   （クリーンルーム再実装）。
+   ============================================================ */
+const DATA = {"patterns": [[[-75, -75, 0], [-50, -75, 0], [-25, -75, 0], [0, -75, 0], [25, -75, 0], [50, -75, 0], [75, -75, 0], [-75, -50, 0], [-50, -50, 0], [-25, -50, 0], [0, -50, 0], [25, -50, 0], [50, -50, 0], [75, -50, 0], [-75, -25, 0], [-50, -25, 0], [-25, -25, 0], [0, -25, 0], [25, -25, 0], [50, -25, 0], [75, -25, 0], [-75, 0, 0], [-50, 0, 0], [-25, 0, 0], [0, 0, 0], [25, 0, 0], [50, 0, 0], [75, 0, 0], [-75, 25, 0], [-50, 25, 0], [-25, 25, 0], [0, 25, 0], [25, 25, 0], [50, 25, 0], [75, 25, 0], [-75, 50, 0], [-50, 50, 0], [-25, 50, 0], [0, 50, 0], [25, 50, 0], [50, 50, 0], [75, 50, 0], [-75, 75, 0], [-50, 75, 0], [-25, 75, 0], [0, 75, 0], [25, 75, 0], [50, 75, 0], [75, 75, 0]], [[-75, -75, 0], [-50, -75, 0], [-25, -75, 0], [0, -75, 0], [25, -75, 0], [50, -75, 0], [75, -75, 0], [-75, -50, 0], [-50, -50, -40], [-25, -50, -40], [0, -50, -40], [25, -50, -40], [50, -50, -40], [75, -50, 0], [-75, -25, 0], [-50, -25, 0], [-25, -25, -40], [0, -25, 0], [25, -25, -40], [50, -25, 0], [75, -25, 0], [-75, 0, 0], [-50, 0, 0], [-25, 0, -40], [0, 0, 0], [25, 0, -40], [50, 0, 0], [75, 0, 0], [-75, 25, 0], [-50, 25, 0], [-25, 25, -40], [0, 25, 0], [25, 25, -40], [50, 25, 0], [75, 25, 0], [-75, 50, 0], [-50, 50, -40], [-25, 50, -40], [0, 50, -40], [25, 50, -40], [50, 50, -40], [75, 50, 0], [-75, 75, 0], [-50, 75, 0], [-25, 75, 0], [0, 75, 0], [25, 75, 0], [50, 75, 0], [75, 75, 0]], [[-21, -75, -45], [-48, -75, -11], [-39, -75, 31], [0, -75, 50], [39, -75, 31], [48, -75, -11], [21, -75, -45], [-21, -50, -45], [-48, -50, -11], [-39, -50, 31], [0, -50, 50], [39, -50, 31], [48, -50, -11], [21, -50, -45], [-21, -25, -45], [-48, -25, -11], [-39, -25, 31], [0, -25, 50], [39, -25, 31], [48, -25, -11], [21, -25, -45], [-21, 0, -45], [-48, 0, -11], [-39, 0, 31], [0, 0, 50], [39, 0, 31], [48, 0, -11], [21, 0, -45], [-21, 25, -45], [-48, 25, -11], [-39, 25, 31], [0, 25, 50], [39, 25, 31], [48, 25, -11], [21, 25, -45], [-21, 50, -45], [-48, 50, -11], [-39, 50, 31], [0, 50, 50], [39, 50, 31], [48, 50, -11], [21, 50, -45], [-21, 75, -45], [-48, 75, -11], [-39, 75, 31], [0, 75, 50], [39, 75, 31], [48, 75, -11], [21, 75, -45]], [[0, -75, -33], [-26, -75, -20], [-32, -75, 7], [-14, -75, 30], [14, -75, 30], [32, -75, 7], [26, -75, -20], [0, -50, -61], [-48, -50, -38], [-60, -50, 13], [-26, -50, 55], [26, -50, 55], [60, -50, 13], [48, -50, -38], [0, -25, -80], [-63, -25, -50], [-78, -25, 17], [-35, -25, 72], [35, -25, 72], [78, -25, 17], [63, -25, -50], [0, 0, -87], [-68, 0, -54], [-85, 0, 19], [-37, 0, 78], [37, 0, 78], [85, 0, 19], [68, 0, -54], [0, 25, -80], [-63, 25, -50], [-78, 25, 17], [-35, 25, 72], [35, 25, 72], [78, 25, 17], [63, 25, -50], [0, 50, -61], [-48, 50, -38], [-60, 50, 13], [-26, 50, 55], [26, 50, 55], [60, 50, 13], [48, 50, -38], [0, 75, -33], [-26, 75, -20], [-32, 75, 7], [-14, 75, 30], [14, 75, 30], [32, 75, 7], [26, 75, -20]], [[-14, 30, -75], [14, 30, -75], [32, 7, -75], [26, -20, -75], [0, -33, -75], [-26, -20, -75], [-32, 7, -75], [-60, 13, -50], [-78, 17, -25], [-85, 19, 0], [-78, 17, 25], [-60, 13, 50], [-32, 7, 75], [-26, -20, 75], [0, -33, 75], [26, -20, 75], [32, 7, 75], [14, 30, 75], [-14, 30, 75], [-26, 55, 50], [-35, 72, 25], [-37, 78, 0], [-35, 72, -25], [-26, 55, -50], [26, 55, -50], [60, 13, -50], [48, -38, -50], [0, -61, -50], [-48, -38, -50], [-63, -50, -25], [-68, -54, 0], [-63, -50, 25], [-48, -38, 50], [0, -61, 50], [48, -38, 50], [60, 13, 50], [26, 55, 50], [35, 72, 25], [37, 78, 0], [35, 72, -25], [78, 17, -25], [63, -50, -25], [0, -80, -25], [0, -87, 0], [0, -80, 25], [63, -50, 25], [78, 17, 25], [85, 19, 0], [68, -54, 0]], [[0, 65, -92], [20, 61, -84], [38, 52, -76], [52, 38, -68], [61, 20, -60], [65, 0, -52], [61, -20, -44], [52, -38, -36], [38, -52, -28], [20, -61, -20], [0, -65, -12], [-20, -61, -4], [-38, -52, 4], [-52, -38, 12], [-61, -20, 20], [-65, 0, 28], [-61, 20, 36], [-52, 38, 44], [-38, 52, 52], [-20, 61, 60], [0, 65, 68], [20, 61, 76], [38, 52, 84], [52, 38, 92], [0, -65, -96], [-20, -61, -88], [-38, -52, -80], [-52, -38, -72], [-61, -20, -64], [-65, 0, -56], [-61, 20, -48], [-52, 38, -40], [-38, 52, -32], [-20, 61, -24], [0, 65, -16], [20, 61, -8], [38, 52, 0], [52, 38, 8], [61, 20, 16], [65, 0, 24], [61, -20, 32], [52, -38, 40], [38, -52, 48], [20, -61, 56], [0, -65, 64], [-20, -61, 72], [-38, -52, 80], [-52, -38, 88], [-61, -20, 96]], [[-50, -50, -50], [-25, -50, -50], [0, -50, -50], [25, -50, -50], [50, -50, -50], [-50, -25, -50], [50, -25, -50], [-50, 0, -50], [50, 0, -50], [-50, 25, -50], [50, 25, -50], [-50, 50, -50], [-25, 50, -50], [0, 50, -50], [25, 50, -50], [50, 50, -50], [-50, -50, -25], [50, -50, -25], [-50, 50, -25], [50, 50, -25], [-50, -50, 0], [50, -50, 0], [-50, 50, 0], [50, 50, 0], [-50, -50, 25], [50, -50, 25], [-50, 50, 25], [50, 50, 25], [-50, -50, 50], [-25, -50, 50], [0, -50, 50], [25, -50, 50], [50, -50, 50], [-50, -25, 50], [50, -25, 50], [-50, 0, 50], [50, 0, 50], [-50, 25, 50], [50, 25, 50], [-50, 50, 50], [-25, 50, 50], [0, 50, 50], [25, 50, 50], [50, 50, 50], [0, 50, 50], [25, -50, 50], [25, 50, 50], [-25, 50, -50], [-25, -50, 50]], [[25, -75, 0], [0, -75, 0], [50, -75, 0], [-75, 75, 0], [75, -75, 0], [75, -75, 0], [-50, -75, 0], [75, -75, 0], [-23, 24, 0], [-20, 72, -11], [-24, 0, 5], [75, 48, -28], [24, 0, -5], [-75, -75, 0], [75, -75, 0], [-75, 50, 0], [28, 72, -23], [-25, -75, 0], [74, 24, -22], [-75, 0, 0], [-75, -75, 0], [25, -75, 0], [-75, -25, 0], [25, 24, -11], [-75, -50, 0], [73, 0, -16], [-75, -50, 0], [25, -75, 0], [-50, -75, 0], [-25, -75, 0], [52, 72, -28], [-25, -75, 0], [-21, 48, -6], [-75, 25, 0], [-50, -75, 0], [-75, 0, 0], [75, 48, -28], [77, 72, -34], [27, 48, -17], [4, 72, -17], [23, -24, 0], [50, -75, 0], [-75, 0, 0], [-75, -50, 0], [-75, 25, 0], [75, -75, 0], [75, -75, 0], [-50, -75, 0], [-75, -75, 0]]], "accent": [8, 9, 10, 11, 12, 16, 18, 23, 25, 30, 32, 36, 37, 38, 39, 40]};
+const ACCENT_SET = new Set(DATA.accent);
+/* 色の組み合わせ（メイン／アクセントの色相ペア）は全32色ぶんの対応表に従う。
+   色そのものは自前生成のランプで、原作のRGB値は使わない。
+   ランプ番号：0=紫 1=灰青 2=青 3=赤橙 4=緑 5=黄 6=赤。
+   対は番号だけで決まり、周回しても変わらない。
+   例外は進入直後の COLOR 0：テーブルではなく残留値（31番の対）を表示し、
+   COLOR を一度押した後からはテーブル駆動になる。 */
+const RAMPS = ["#6a2ae0", "#6f97a3", "#2440e0", "#d8541e", "#2ec430", "#f0c81e", "#d21f1f"];
+const PAIR_TABLE = [[0,1],[1,3],[6,4],[4,1],[1,6],[2,0],[0,3],[1,4],[6,5],[2,1],[5,3],[2,3],[1,2],[2,4],[0,2],[2,5],[2,6],[3,0],[0,4],[3,1],[5,4],[3,2],[1,0],[3,4],[1,5],[3,6],[4,0],[0,5],[4,2],[4,3],[3,5],[4,5]];
+const ENTRY_RESIDUAL = { main: RAMPS[4], accent: RAMPS[5] }; // 進入直後 COLOR 0 の残留値＝31番の対（緑＋黄）
+function pairFor(color, touched) {
+  if (!touched && color === 0) return ENTRY_RESIDUAL;
+  const [m, a] = PAIR_TABLE[color];
+  return { main: RAMPS[m], accent: RAMPS[a] };
+}
+/* ボールの絵は原作ピクセルを使わず、陰影の構造（左上からの光、球面の
+   拡散反射、右下の縁の暗色）だけを手がかりに 16x16 の球として自前描画する。 */
+function hexRgb(hex) { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+function blendHex(a, b, k) { // 色のクロスフェード用：混ぜてからPCエンジン風に各色3bitへ丸める
+  const A = hexRgb(a), B = hexRgb(b);
+  const q = v => Math.round(Math.round(v / 255 * 7) / 7 * 255);
+  const c = A.map((v, i) => q(v + (B[i] - v) * k));
+  return "#" + c.map(v => v.toString(16).padStart(2, "0")).join("");
+}
+function mix(a, b, t) { return [0, 1, 2].map(i => Math.round(a[i] + (b[i] - a[i]) * t)); }
+const ballCache = new Map();
+function getBallSprite(baseHex, dim) {
+  const key = baseHex + "|" + dim;
+  if (ballCache.has(key)) return ballCache.get(key);
+  const base = hexRgb(baseHex);
+  const c = document.createElement("canvas");
+  c.width = c.height = 16;
+  const g = c.getContext("2d");
+  const img = g.createImageData(16, 16);
+  const L = [-0.45, -0.52, 0.73], LL = Math.hypot(...L), lx = L[0] / LL, ly = L[1] / LL, lz = L[2] / LL;
+  const clamp = v => Math.max(0, Math.min(255, v));
+  for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+    const o = (y * 16 + x) * 4;
+    const dx = (x - 7.5) / 7.7, dy = (y - 7.5) / 7.7, d2 = dx * dx + dy * dy;
+    if (d2 > 1) { img.data[o + 3] = 0; continue; }
+    const nz = Math.sqrt(1 - d2);
+    const diff = Math.max(0, dx * lx + dy * ly + nz * lz);
+    // 陰影は白への混色ではなく「全チャンネルに同量を足し引きする」加算式。
+    // 暗い側は色が濃く、明るい側も色が残る。段は11段で、
+    // diff 0.8 以上で急に明るくなるカーブがツヤの芯になる。
+    const idx = d2 > 0.86 ? 2 : Math.max(0, Math.min(10, Math.floor(1.6 + 5.5 * diff + Math.max(0, diff - 0.8) * 20)));
+    const off = (idx - 5) * 32;
+    img.data[o] = Math.round(clamp(base[0] + off) * dim);
+    img.data[o + 1] = Math.round(clamp(base[1] + off) * dim);
+    img.data[o + 2] = Math.round(clamp(base[2] + off) * dim);
+    img.data[o + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  ballCache.set(key, c);
+  return c;
+}
+
+/* ---------------- 立体パターン ----------------
+   全8種・各49点。座標はROMテーブルそのまま（-96..96）。c=1 がアクセント球。 */
+const patternPoints = DATA.patterns.map(pts => pts.map(([x, y, z], idx) => [x / 90, y / 90, z / 90, ACCENT_SET.has(idx) ? 1 : 0]));
+/* 拡張変換：8立体を、他のボール個数でも再現する。
+   MD版＝64個、AC版＝144個。各立体の構造パラメータに沿って
+   点を振り直す。アクセントは「最も近い元の点がアクセントなら引き継ぐ」で決める
+   （P1の二層だけは構造ルールで直接決める）。 */
+function nearestAccent(pts, x, y, z) {
+  let best = 1e9, acc = 0;
+  for (const [ox, oy, oz, oc] of pts) { const d = (ox - x) ** 2 + (oy - y) ** 2 + (oz - z) ** 2; if (d < best) { best = d; acc = oc; } }
+  return acc;
+}
+function resample(pi, N) {
+  const src = patternPoints[pi]; // 元の49点（原寸・正規化済み）
+  const S = Math.round(Math.sqrt(N)); // 64→8, 144→12
+  const out = [];
+  let segScale = null;
+  const push = (x, y, z, acc) => out.push([x / 90, y / 90, z / 90, acc !== undefined ? acc : nearestAccent(src, x / 90, y / 90, z / 90)]);
+  if (pi <= 4) {
+    /* 0〜4は「IIのパネル」の変形シリーズ：
+       同じ S×S の配置（アクセント＝IIの字形）を保ったまま形だけを変える。
+       字形は元の7x7デザイン（アクセント16個の配置）から解像度変換する。 */
+    const glyph = new Set(DATA.accent);
+    const cellAcc = (r, c) => glyph.has(Math.round(r * 6 / (S - 1)) * 7 + Math.round(c * 6 / (S - 1))) ? 1 : 0;
+    for (let r = 0; r < S; r++) for (let c = 0; c < S; c++) {
+      const u = -75 + 150 * c / (S - 1), v = -75 + 150 * r / (S - 1), acc = cellAcc(r, c);
+      if (pi === 0) push(u, v, 0, acc);                                   // 平面
+      else if (pi === 1) push(u, v, acc ? -40 : 0, acc);                  // IIの部分だけ手前に飛び出る
+      else {
+        const th = (90 - (u + 75) / 150 * 360) * Math.PI / 180;           // 横方向を全周に巻く
+        if (pi === 2) push(49.7 * Math.cos(th), v, 49.7 * Math.sin(th), acc); // 円柱（半径49.7）
+        else {
+          const rr = Math.sqrt(Math.max(1, 85 * 85 - v * v));             // 球（半径85、緯度で輪がすぼまる）
+          if (pi === 3) push(rr * Math.cos(th), v, rr * Math.sin(th), acc);
+          else push(rr * Math.cos(th), rr * Math.sin(th), v, acc);       // 4：球を横に倒す（Y/Z入替）
+        }
+      }
+    }
+  } else if (pi === 7) {
+    /* エンブレムは格子に乗せて収める：S×S格子（間隔25）の上に ┌枠（通常色）と
+       「山」（縦棒3本＋底辺、アクセント）を描き、余った点は元のPCE版と同じく同じ場所に重ねる。
+       元の実構造：背面＝┌枠（上辺＋左辺）、前面＝縦棒 x=-25/+25/+75（y=0〜75）＋底辺、中央の棒は無い。 */
+    const half = 25 * (S - 1) / 2, L = k => -half + 25 * k;
+    const cells = []; // [x, y, z, accent]
+    for (let c = 0; c < S; c++) cells.push([L(c), -half, 0, 0]);
+    for (let r = 1; r < S; r++) cells.push([-half, L(r), 0, 0]);
+    // 山：横幅は右端から1列内側まで。真ん中の棒だけ1個分高い
+    const barL = Math.round((S - 1) / 3), barR = S - 2, barM = Math.round((barL + barR) / 2);
+    const barCols = [barL, barM, barR];
+    const r0 = Math.round((S - 1) / 2);
+    // 山の面は元データどおり少し傾ける（右下ほど手前：z = -6 - 0.18(x+y)）
+    const tilt = (x, y) => Math.round(-6 - 0.18 * (x + y));
+    for (const bc of barCols) {
+      const top = bc === barM ? r0 - 1 : r0;
+      for (let r = top; r < S; r++) cells.push([L(bc), L(r), tilt(L(bc), L(r)), 1]);
+    }
+    for (let c = barL; c <= barR; c++) cells.push([L(c), half, tilt(L(c), half), 1]);
+    const seen = new Map();
+    for (const cell of cells) seen.set(cell[0] + "," + cell[1], cell);
+    const uniq = [...seen.values()];
+    for (let i = 0; i < N; i++) { const cell = uniq[i % uniq.length]; out.push([cell[0] / 90, cell[1] / 90, cell[2] / 90, cell[3]]); }
+    return out;
+  } else if (pi === 5) { // 二重らせん：半径64.5、z ±94、ねじれ約-420°、2本は180°ずらし
+    const half = Math.floor(N / 2);
+    for (let hIdx = 0; hIdx < 2; hIdx++) {
+      const n = hIdx === 0 ? half : N - half, a0 = hIdx === 0 ? 90 : -90;
+      for (let i = 0; i < n; i++) {
+        const t = n === 1 ? 0 : i / (n - 1), th = (a0 - 420 * t) * Math.PI / 180;
+        push(64.5 * Math.cos(th), 64.5 * Math.sin(th), -94 + 188 * t);
+      }
+    }
+  } else if (pi === 6) { // 立方体枠：線分の集合を弧長で等間隔サンプリング
+    const C = [];
+    for (const sx of [-50, 50]) for (const sy of [-50, 50]) for (const sz of [-50, 50]) C.push([sx, sy, sz]);
+    const segs = []; // [始点, 終点, アクセント(0/1/undefined=近い元の点から)]
+    for (let i = 0; i < 8; i++) for (let j = i + 1; j < 8; j++) {
+      const d = Math.abs(C[i][0] - C[j][0]) + Math.abs(C[i][1] - C[j][1]) + Math.abs(C[i][2] - C[j][2]);
+      if (d === 100) segs.push([C[i], C[j], undefined]);
+    }
+    const lens = segs.map(([a, b]) => Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]));
+    const total = lens.reduce((s, v) => s + v, 0);
+    segScale = 22 * N / total; // 線分上の点間隔がPCE版と同等（約22）になる倍率
+    for (let i = 0; i < N; i++) {
+      let d = total * (i + 0.5) / N, si = 0;
+      while (si < segs.length - 1 && d > lens[si]) { d -= lens[si]; si++; }
+      const [a, b, acc] = segs[si], t = d / lens[si];
+      push(a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t, acc);
+    }
+  }
+  // 間隔をPCE版と同等に：全体を (S-1)/6 倍に広げる（MD=7/6倍、AC=11/6倍）。線分サンプリング（6・7番）は segScale を使う
+  const f = segScale !== null ? segScale : (Math.round(Math.sqrt(N)) - 1) / 6;
+  const scaled = out.map(([x, y, z, c]) => [x * f, y * f, z * f, c]);
+  // どのパターンも、その機種のパネル（8×8／12×12）の範囲に収める
+  const box = 25 * (Math.round(Math.sqrt(N)) - 1) / 2 / 90;
+  const m = Math.max(...scaled.map(([x, y, z]) => Math.max(Math.abs(x), Math.abs(y), Math.abs(z))));
+  if (m > box) { const k = box / m; return scaled.map(([x, y, z, c]) => [x * k, y * k, z * k, c]); }
+  return scaled;
+}
+for (let i = 0; i < 8; i++) patternPoints.push(resample(i, 64));  // MD版（64個）
+for (let i = 0; i < 8; i++) patternPoints.push(resample(i, 144)); // AC版（144個）
+const patternReal = patternPoints.map(p => p.length); // 各パターンの実点数（残りは駐車ボール）
+/* 編集の「初期値に戻す」用：起動直後のテンプレート（未編集）の控え。保存で patternPoints が書き換わっても、こちらは不変。 */
+const templatePoints = patternPoints.map(pts => pts.map(p => [...p]));
+const templateReal = patternReal.slice();
+const patternMul = new Array(24).fill(1); // ボールの大きさは全機種1倍で統一
+/* 待機ボール：実点が144未満のパターンは、残りを実点のどれかと同じ位置に重ねて
+   全パターンの点数を144にそろえる。重なっているので普段は見えず、切替時は形の
+   中から分かれて出てくる／形の中に吸収される。 */
+{
+  for (let pi = 0; pi < patternPoints.length; pi++) {
+    const full = patternPoints[pi].slice();
+    const n = full.length;
+    for (let i = n; i < 144; i++) { const s = full[i % n]; full.push([s[0], s[1], s[2], 0]); }
+    patternPoints[pi] = full;
+  }
+}
+
+/* ---------------- 状態と操作 ---------------- */
+const state = {
+  pattern: 0, color: 0, coord: 1, // 0=X,1=Y,2=Z（自動回転の軸）
+  ax: 0, ay: 0, az: 0,            // 角度は本家と同じ「0〜255で1周」の単位（256ステップ）。初期値は全て0
+  speeds: [0, 1, 0], stoppedAxes: [false, false, false], zoomDist: 100, easing: false, // ZOOMは距離値 1〜242・初期100。小さいほど大きく見える（効き方は zoomDisp/ballZoom 参照） // 遷移の味付け（ずらし＋行き過ぎ）。初期値は無効 // SPEEDは軸ごとに記憶（初期はYだけ1）。符号付き1バイト（-128〜+127）で、端を超えると反対の端へ回る
+  smooth: false,                  // なめらか：無効＝原作準拠（角度は整数ステップ、位置はドット単位に量子化）。有効で滑らかになる
+  morphSteps: 64, morphHold: 2,   // パターン遷移：更新回数×1更新あたりの保持フレーム数（合計=MorphSteps×MorphHold フレーム）
+  depthMode: 0, bg: 0, colorTouched: false, // COLORを一度でも押したか（進入直後の残留値表示を切り替える）                   // 奥行き表現 0=色は点ごとに固定 1=奥ほどかすむ 2=奥行きでパレット切替
+};
+/* 背景色：0=デフォルト（黒）／1=昼（ステージ1の空 #006cfc）／2=夕方（夕焼けステージの空の黄色 #fcfc00） */
+const BG_COLORS = ["#000000", "#006cfc", "#fcfc00"];
+const $ = id => document.getElementById(id);
+const cv = $("screen"), ctx = cv.getContext("2d");
+ctx.imageSmoothingEnabled = false;
+
+const wrapSpeed = v => ((v + 128) % 256 + 256) % 256 - 128; // -128〜+127の範囲でループ
+function syncUI() {
+  $("zoom").value = 243 - state.zoomDist; $("zoomVal").textContent = state.zoomDist; // スライダーは右ほど寄る向き（値は本家の距離値そのまま表示）
+  for (let i = 0; i < 3; i++) {
+    $("spd" + i).value = state.speeds[i];
+    $("spdVal" + i).textContent = (state.speeds[i] > 0 ? "+" : "") + state.speeds[i];
+    $("rowSpd" + i).classList.toggle("sel", state.coord === i);
+  }
+  for (let i = 0; i < 3; i++) {
+    $("spdStop" + i).classList.toggle("on", state.stoppedAxes[i]); // 文字はSTOP固定（幅が変わるとスライダーが伸縮するため）。状態は色で示す
+  }
+  $("btnSmooth").textContent = state.smooth ? "なめらか：有効" : "なめらか：無効";
+  $("btnSmooth").classList.toggle("on", state.smooth);
+  $("btnDepth").textContent = "奥行き：" + state.depthMode;
+  $("btnBg").textContent = "背景：" + state.bg;
+  $("btnPattern").textContent = "パターン：" + state.pattern;
+  $("btnColor").textContent = "カラー：" + state.color;
+}
+/* パターン遷移：全パターンを内部的に144点構成に統一し（不足分は待機ボールで埋める）、
+   現在の表示座標から次の座標へ、morphSteps 回の更新で線形に寄せる（各更新を morphHold フレーム保持）。 */
+let curPts = patternPoints[0].map(p => [...p]);
+/* 色のクロスフェード（原作仕様：8段、1段7フレーム・全体50フレーム≒0.83秒、初段は即時）。
+   遷移中にCOLORを押したら、その時点の混ざり具合から次の色へ向かう。 */
+let dispPair = pairFor(0, false);
+let colorFade = null;
+const FADE_HOLD = 7;
+let morph = null;
+let sizeMulCur = 1; // ボール大きさ倍率。遷移中は徐々に寄せる
+/* 遷移の対応付け（MD/ACが絡む場合）：「今の位置から一番近い目標点」へ
+   1対1で割り当てる（アクセント同士・通常同士を優先）。 */
+function matchTargets(from, target) {
+  const n = from.length, pairs = [];
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+    const dx = from[i][0] - target[j][0], dy = from[i][1] - target[j][1], dz = from[i][2] - target[j][2];
+    let cost = dx * dx + dy * dy + dz * dz;
+    if (from[i][3] !== target[j][3]) cost += 9;
+    pairs.push([cost, i, j]);
+  }
+  pairs.sort((a, b) => a[0] - b[0]);
+  const usedF = new Array(n).fill(false), usedT = new Array(n).fill(false), to = new Array(n);
+  for (const [, i, j] of pairs) if (!usedF[i] && !usedT[j]) { usedF[i] = usedT[j] = true; to[i] = target[j]; }
+  return to;
+}
+function changePattern(next) {
+  const prev = state.pattern;
+  state.pattern = next;
+  // PCE同士（0〜7）は番号で対応付ける（原作はスプライト番号ごとに座標テーブルを
+  // 切り替えるため）。その方が「板が曲がって円柱になる」遷移になる。
+  // 距離の近い順の貪欲マッチングだと列同士が入れ替わり、ボールがすれ違ってしまう。
+  const paired = prev < 8 && next < 8;
+  const to = paired
+    ? patternPoints[next].map(p => [...p])
+    : matchTargets(curPts, patternPoints[next]);
+  // 待機ボールの判定（出発側＝prev の実点数、到着側＝各スロットの行き先が実点かどうか）。
+  // 両端とも待機のスロットは遷移中も描かない：実点と全く同じ軌道をたどるため、
+  // 描くと通常色の分身がアクセント球の手前に重なって色が消えたように見える。
+  const toFiller = paired
+    ? to.map((_, i) => i >= patternReal[next])
+    : to.map(tp => patternPoints[next].indexOf(tp) >= patternReal[next]);
+  morph = { from: curPts.map(p => [...p]), to, t: 0, sizeFrom: sizeMulCur, sizeTo: patternMul[next], fromReal: patternReal[prev], toFiller }; // 遷移は 64回×2F 固定
+  syncUI();
+}
+$("btnPattern").onclick = () => changePattern((state.pattern + 1) % patternPoints.length);
+
+function cycleColor() {
+  state.color = (state.color + 1) % 32;
+  state.colorTouched = true; // 一度押せば以後はテーブル駆動（本家の仕組み）
+  colorFade = { from: dispPair, to: pairFor(state.color, true), t: 0 };
+  syncUI();
+}
+$("btnColor").onclick = cycleColor;
+$("btnFs").onclick = () => {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else cv.requestFullscreen && cv.requestFullscreen().catch(() => {});
+};
+// なめらかとイージングは同じボタンで連動（オンで両方有効）
+$("btnSmooth").onclick = () => { state.smooth = !state.smooth; state.easing = state.smooth; drawnZoom = state.zoomDist; syncUI(); };
+// ボタンを押した後はフォーカスを外す（EnterがCOORD切替に使えるように、押したボタンの再実行を防ぐ）
+document.addEventListener("click", e => { if (e.target.tagName === "BUTTON") e.target.blur(); });
+$("btnDepth").onclick = () => { state.depthMode = (state.depthMode + 1) % 3; syncUI(); };
+$("btnBg").onclick = () => { state.bg = (state.bg + 1) % 3; syncUI(); };
+$("zoom").oninput = e => { state.zoomDist = 243 - (+e.target.value); syncUI(); };
+/* ZOOMの効き方：位置の広がりは 1/(距離+13.4) に比例し、
+   ボールの大きさは 1/(距離+58) に比例・最大32ドットで頭打ち（原作はタイル切替で段階的に変える）。
+   距離100のときの表示が基準（位置倍率110・ボール倍率約1）になるよう定数を合わせている。 */
+const zoomDisp = (d = state.zoomDist) => 110 * 113.4 / (d + 13.4); // 位置の表示倍率
+const ballZoom = (d = state.zoomDist) => Math.min(2, 159 / (d + 58)); // ボール大きさ倍率（距離100で約1、最大2＝32ドット相当）
+for (let i = 0; i < 3; i++) {
+  $("spd" + i).oninput = e => { state.speeds[i] = +e.target.value; if (state.speeds[i] !== 0) state.stoppedAxes[i] = false; if (i === 0) inertia.x = 0; if (i === 1) inertia.y = 0; syncUI(); };
+  const step = d => { state.speeds[i] = wrapSpeed(state.speeds[i] + d); if (state.speeds[i] !== 0) state.stoppedAxes[i] = false; if (i === 0) inertia.x = 0; if (i === 1) inertia.y = 0; syncUI(); };
+  $("spdStop" + i).onclick = () => { state.stoppedAxes[i] = !state.stoppedAxes[i]; syncUI(); };
+  $("spdDec" + i).onclick = () => step(-1);
+  $("spdInc" + i).onclick = () => step(1);
+}
+
+// ドラッグで回転、2本指ピンチでZOOM（スマホ用）
+let drag = null; // { x, y, id } 最後に反映済みの位置と対象ポインター
+const pointers = new Map(); // 押さえている指（pointerId → {x, y}）
+let pinch = null; // ピンチ開始時の { d0: 指の間隔, zoom0: 距離値 }
+/* ドラッグの軌跡サンプル。スマホでは「指を止めてから離す」と、離す動作そのもので
+   最後の座標が少しずれて届くことがある。対策として、離した瞬間から50ms前の位置を
+   静止位置として採用し、それ以降に届いた動きは巻き戻して反映しない。
+   投げ（フリック）の初速も静止位置までの区間から測るので、止めてから離せば
+   ズレも誤った投げも起きない。 */
+let dragHist = []; // { t, x, y }（ドラッグ中のみ保持）
+function pushHist(t, x, y) {
+  dragHist.push({ t, x, y });
+  while (dragHist.length > 2 && dragHist[0].t < t - 400) dragHist.shift();
+}
+/* 投げの勢い（SPEED設定とは別枠の上乗せ）。
+   角速度（角度単位/秒）で持ち、摩擦で指数的に減衰する（半減期450ms）。
+   上限はSPEED換算45。掴み直し・スライダー操作・リセットで消える。 */
+const inertia = { x: 0, y: 0 };
+const FLICK_MAX = 45 * 60;
+function decayInertia(ms) {
+  const f = Math.pow(0.5, ms / 450);
+  inertia.x *= f; inertia.y *= f;
+  if (Math.abs(inertia.x) < 3) inertia.x = 0;
+  if (Math.abs(inertia.y) < 3) inertia.y = 0;
+}
+cv.addEventListener("pointerdown", e => {
+  if (editor.active) return;
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  cv.setPointerCapture(e.pointerId);
+  inertia.x = 0; inertia.y = 0; // 掴んだら勢いは止める
+  if (pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    pinch = { d0: Math.hypot(a.x - b.x, a.y - b.y), zoom0: state.zoomDist };
+    drag = null; dragHist = []; // ピンチ中は回転しない
+  } else if (pointers.size === 1) {
+    drag = { x: e.clientX, y: e.clientY, id: e.pointerId };
+    dragHist = [{ t: e.timeStamp, x: e.clientX, y: e.clientY }];
+  }
+});
+cv.addEventListener("pointermove", e => {
+  if (editor.active || !pointers.has(e.pointerId)) return;
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch && pointers.size === 2) {
+    const [a, b] = [...pointers.values()];
+    const d = Math.hypot(a.x - b.x, a.y - b.y);
+    if (pinch.d0 > 0 && d > 0) {
+      // 指を広げる＝寄る（距離−）、狭める＝引く（距離+）。開始時からの比率で決める
+      state.zoomDist = Math.max(1, Math.min(242, Math.round(pinch.zoom0 * pinch.d0 / d)));
+      syncUI();
+    }
+    return;
+  }
+  if (!drag || drag.id !== e.pointerId) return;
+  state.ay += (e.clientX - drag.x) * 0.45;
+  state.ax += (e.clientY - drag.y) * 0.45;
+  drag.x = e.clientX; drag.y = e.clientY;
+  pushHist(e.timeStamp, e.clientX, e.clientY);
+});
+function endPointer(e, flick) {
+  const wasDrag = drag && drag.id === e.pointerId;
+  pointers.delete(e.pointerId);
+  if (pointers.size < 2) pinch = null;
+  if (pointers.size === 1) {
+    // 残った指で回転を続けられるようアンカーを付け替え（履歴も仕切り直し）
+    const [id, p] = [...pointers.entries()][0];
+    drag = { x: p.x, y: p.y, id };
+    dragHist = [{ t: e.timeStamp, x: p.x, y: p.y }];
+  } else if (pointers.size === 0) {
+    if (wasDrag && dragHist.length) {
+      // 静止位置＝離す50ms前のサンプル。それ以降に反映した分は巻き戻して合わせる。
+      // 50ms未満の素早い操作ではサンプルが無いので、最後の位置をそのまま使う。
+      const cut = e.timeStamp - 50;
+      let rest = null;
+      for (const s of dragHist) if (s.t <= cut) rest = s;
+      if (!rest) rest = dragHist[dragHist.length - 1];
+      state.ay += (rest.x - drag.x) * 0.45;
+      state.ax += (rest.y - drag.y) * 0.45;
+      // 投げ：静止位置が新しい（＝止まってから時間が経っていない）ときだけ初速を付ける
+      if (flick && e.timeStamp - rest.t <= 100) {
+        let s0 = dragHist[0];
+        for (const s of dragHist) if (s.t <= rest.t - 110) s0 = s;
+        const dtm = rest.t - s0.t;
+        if (dtm >= 30) {
+          const clamp = v => Math.max(-FLICK_MAX, Math.min(FLICK_MAX, v));
+          inertia.y = clamp((rest.x - s0.x) / dtm * 1000 * 0.45);
+          inertia.x = clamp((rest.y - s0.y) / dtm * 1000 * 0.45);
+          if (Math.abs(inertia.x) < 25) inertia.x = 0; // 弱すぎる投げは付けない
+          if (Math.abs(inertia.y) < 25) inertia.y = 0;
+          if (state.stoppedAxes[0]) inertia.x = 0;
+          if (state.stoppedAxes[1]) inertia.y = 0;
+        }
+      }
+    }
+    drag = null; dragHist = [];
+  }
+}
+cv.addEventListener("pointerup", e => endPointer(e, true));
+cv.addEventListener("pointercancel", e => endPointer(e, false));
+// ホイールでZOOM（上＝寄る＝距離−10、下＝引く＝距離+10）
+cv.addEventListener("wheel", e => {
+  e.preventDefault();
+  state.zoomDist = Math.max(1, Math.min(242, state.zoomDist + (e.deltaY < 0 ? -10 : 10)));
+  syncUI();
+}, { passive: false });
+
+// 本家準拠キー
+window.addEventListener("keydown", e => {
+  if (editor.active) return;
+  if (e.key === "Enter") { state.coord = (state.coord + 1) % 3; syncUI(); e.preventDefault(); }
+  else if (e.key === "ArrowUp") { changePattern((state.pattern + 1) % patternPoints.length); e.preventDefault(); }
+  else if (e.key === "ArrowDown") { cycleColor(); e.preventDefault(); }
+  else if (e.key === "ArrowLeft") { state.speeds[state.coord] = wrapSpeed(state.speeds[state.coord] - 1); syncUI(); e.preventDefault(); }
+  else if (e.key === "ArrowRight") { state.speeds[state.coord] = wrapSpeed(state.speeds[state.coord] + 1); syncUI(); e.preventDefault(); }
+  else if (e.key === "Shift") { if (!e.repeat) { state.stoppedAxes[state.coord] = !state.stoppedAxes[state.coord]; syncUI(); } }
+  else if (e.key === "z" || e.key === "Z") { zoomHeld.in = true; }
+  else if (e.key === "x" || e.key === "X") { zoomHeld.out = true; }
+});
+/* ZOOMキー（I=Z / II=X）の長押し状態。本家どおり、押している間だけ
+   毎フレーム ±1 ずつ距離値が変わる（I=寄る / II=引く、1〜242でクランプ）。 */
+const zoomHeld = { in: false, out: false };
+let zoomAcc = 0;
+window.addEventListener("keyup", e => {
+  if (e.key === "z" || e.key === "Z") zoomHeld.in = false;
+  else if (e.key === "x" || e.key === "X") zoomHeld.out = false;
+});
+
+/* ---------------- 描画 ---------------- */
+function drawMenuText() {
+  ctx.fillStyle = state.bg === 0 ? "#3f8cff" : state.bg === 2 ? "#5a3000" : "#ffffff"; // 明るい背景では読める色にする（昼=白、夕方の黄色地には濃い茶）
+  ctx.font = "bold 17px monospace";
+  ctx.textBaseline = "top";
+  const L = 18; let y = 22;
+  const line = (s) => { ctx.fillText(s, L, y); y += 27; };
+  line("↑ :PATTERN " + state.pattern);
+  line("↓ :COLOR   " + state.color);
+  line("RUN:COORD  " + "XYZ"[state.coord]);
+  line("I II:ZOOM   " + state.zoomDist);
+  line("←→:SPEED   " + "XYZ"[state.coord] + " " + (state.speeds[state.coord] > 0 ? "+" : "") + state.speeds[state.coord]);
+  line("SEL:" + (state.stoppedAxes[state.coord] ? "START" : "STOP") + " (" + "XYZ"[state.coord] + ")");
+  y += 8;
+  ctx.fillStyle = state.bg === 0 ? "#2f6fd0" : state.bg === 2 ? "#7a4800" : "#f2f2f2";
+  const sp = i => (state.speeds[i] > 0 ? "+" : "") + state.speeds[i];
+  line("XD: " + ((Math.round(state.ax) % 256) + 256) % 256 + " (" + sp(0) + ")");
+  line("YD: " + ((Math.round(state.ay) % 256) + 256) % 256 + " (" + sp(1) + ")");
+  line("ZD: " + ((Math.round(state.az) % 256) + 256) % 256 + " (" + sp(2) + ")");
+}
+
+/* 回転の進み方：原作は毎フレーム「角度 += 速度」。SPEED 1 = 1フレームに+1、
+   SPEED 2 = +2。つまり角速度は SPEED×60 単位/秒で、1周256フレーム≒4.3秒。
+   本家風（なめらか無効）では 1/60 秒ごとの固定ステップで角度を進める
+   （時刻の揺れでステップ幅がブレると残像っぽく見えるため）。
+   なめらか有効では時計ベースで連続的に進める。 */
+const PX = 3; // 表示Canvas 768px ÷ 本家 256px ＝ 本家1ドットの大きさ
+let lastTime = 0;
+let rotAcc = 0; // 本家風の描画更新（30Hz）用アキュムレータ（ms）
+let drawnZoom = 100; // 本家風で「画面に出ている」ZOOM距離（描画更新のタイミングでのみ変わる）
+function frame(t) {
+  requestAnimationFrame(frame);
+  if (editor.active) { drawEditor(); lastTime = t; return; }
+  if (!lastTime) { lastTime = t; return; }
+  let dt = t - lastTime; lastTime = t;
+  if (dt > 100) dt = 100;
+  if (!drag) {
+    // SPEEDもSTOPも軸ごとに独立：止まっていない軸だけが、それぞれの速度で回る（実機準拠 SPEED×60単位/秒、1周≒4.3秒）
+    if (state.smooth) {
+      const k = 60 * dt / 1000;
+      if (!state.stoppedAxes[0]) state.ax += state.speeds[0] * k;
+      if (!state.stoppedAxes[1]) state.ay += state.speeds[1] * k;
+      if (!state.stoppedAxes[2]) state.az += state.speeds[2] * k;
+      // 投げの勢い（別枠の上乗せ、摩擦で減衰）。STOP中の軸は勢いごと止める
+      if (!state.stoppedAxes[0]) state.ax += inertia.x * dt / 1000; else inertia.x = 0;
+      if (!state.stoppedAxes[1]) state.ay += inertia.y * dt / 1000; else inertia.y = 0;
+      decayInertia(dt);
+    } else {
+      // 本家風：本家の3D ROOMは描画の更新が2フレームに1回（30Hz）しかない。
+      // 角度カウンタ自体は毎フレーム進むのに、画面に出るのは2フレーム分まとめて。
+      // だから1回のジャンプが2倍の大きさになり、ガタガタした動きになる。
+      rotAcc += dt;
+      const ticks = Math.floor(rotAcc * 30 / 1000);
+      if (ticks > 0) {
+        rotAcc -= ticks * 1000 / 30;
+        if (!state.stoppedAxes[0]) state.ax += state.speeds[0] * 2 * ticks;
+        if (!state.stoppedAxes[1]) state.ay += state.speeds[1] * 2 * ticks;
+        if (!state.stoppedAxes[2]) state.az += state.speeds[2] * 2 * ticks;
+        // 投げの勢いも本家風では整数SPEEDに丸めて乗せる（減速が段階的になる）
+        if (!state.stoppedAxes[0]) state.ax += Math.round(inertia.x / 60) * 2 * ticks; else inertia.x = 0;
+        if (!state.stoppedAxes[1]) state.ay += Math.round(inertia.y / 60) * 2 * ticks; else inertia.y = 0;
+        decayInertia(ticks * 1000 / 30);
+        drawnZoom = state.zoomDist; // ZOOMの見た目も描画更新のタイミングでだけ変わる
+      }
+    }
+  } else rotAcc = 0;
+  // ZOOM長押し（本家準拠：押している間、毎フレーム±1）
+  {
+    const dir = (zoomHeld.out ? 1 : 0) - (zoomHeld.in ? 1 : 0);
+    if (dir !== 0 && !editor.active) {
+      zoomAcc += dir * dt * 60 / 1000;
+      const whole = Math.trunc(zoomAcc);
+      if (whole !== 0) {
+        zoomAcc -= whole;
+        const nd = Math.max(1, Math.min(242, state.zoomDist + whole));
+        if (nd !== state.zoomDist) { state.zoomDist = nd; syncUI(); }
+      }
+    } else zoomAcc = 0;
+  }
+  // パターン遷移（モーフィング）：1フレーム＝1/60秒として数える。
+  // 本家風では座標の更新は2フレームに1回（morphHold）だけ入る：
+  // 64ステップの遷移なら位置の更新は32回に段々になる。
+  if (morph) {
+    morph.t += dt / (1000 / 60);
+    const stepFrames = state.smooth ? 1 : state.morphHold;
+    const totalSteps = state.morphSteps;
+    const stepIdx = Math.min(totalSteps, Math.floor(morph.t / stepFrames));
+    const k = stepIdx / totalSteps;
+    for (let i = 0; i < curPts.length; i++) {
+      const f = morph.from[i], to = morph.to[i];
+      // イージング有効時：ボールごとに開始タイミングを少しずつずらし（番号順に波のように）、
+      // 到着直前はわずかに行き過ぎてから戻る（easeOutBack）で「収まる」感じを出す。
+      // 無効時は全点そろって線形に遷移する。
+      let e = k;
+      if (state.easing) {
+        const delay = (i / (curPts.length - 1)) * 0.35;
+        const lk = Math.max(0, Math.min(1, (k - delay) / (1 - 0.35)));
+        const s = 1.0, u = lk - 1;
+        e = 1 + (s + 1) * u * u * u + s * u * u;
+      }
+      curPts[i] = [f[0] + (to[0] - f[0]) * e, f[1] + (to[1] - f[1]) * e, f[2] + (to[2] - f[2]) * e, to[3]];
+    }
+    sizeMulCur = morph.sizeFrom + (morph.sizeTo - morph.sizeFrom) * k;
+    if (stepIdx >= totalSteps) {
+      morph = null;
+      // 対応付けで並び替えた到着点を、正規の並びに戻す。
+      // 戻さないと「実点が後ろの番号にいる」状態になり、待機ボールの描画スキップ（番号判定）で実点が消えてしまう。
+      curPts = patternPoints[state.pattern].map(p => [...p]);
+    }
+  }
+  // 本家風は角度を整数ステップに丸める（256分割の粗さがカクつきの正体の一つ）
+  const q = state.smooth ? (v => v) : (v => Math.round(v));
+  const rx = q(state.ax) * Math.PI * 2 / 256, ry = q(state.ay) * Math.PI * 2 / 256, rz = q(state.az) * Math.PI * 2 / 256;
+  // 符号は原作に合わせる：X回転とZ回転は表示角度と逆向き。
+  // 順序は Z→X→Y。Y回転だけ表示通り。
+  const sx = -Math.sin(rx), cx = Math.cos(rx), sy = Math.sin(ry), cy = Math.cos(ry), sz = -Math.sin(rz), cz = Math.cos(rz);
+  const pts = curPts.map(([x, y, z, c], idx) => {
+    let X = x * cz - y * sz, Y = x * sz + y * cz, Z = z;              // Z回転
+    let Y2 = Y * cx - Z * sx, Z2 = Y * sx + Z * cx;                   // X回転
+    let X3 = X * cy + Z2 * sy, Z3 = -X * sy + Z2 * cy;                // Y回転
+    if (!state.smooth) {
+      // 原作再現：回転後の座標は整数（元の単位）に丸めてから投影する。
+      // 原作は回転結果を整数の座標テーブルに書き戻すため、ボールの中心は
+      // 整数格子の上にしか乗らない。ズームで拡大すると格子ごと広がり、
+      // 回転中のボールが跳ぶように見える。
+      X3 = Math.round(X3 * 90) / 90; Y2 = Math.round(Y2 * 90) / 90; Z3 = Math.round(Z3 * 90) / 90;
+    }
+    // 位置のパースは「なめらか」に組み込む：
+    // オフ（本家風）＝原作と同じ平行投影（位置パースなし）、
+    // オン＝弱い透視投影がかかる。
+    // ボールの大きさは両モードともボールごとの奥行きで変わる（手前が大きく、奥が小さい。
+    // 原作はタイル切替式で、境界の距離では2サイズが混在する）。
+    const posP = state.smooth ? 8 / (8 + Z3) : 1;
+    const sizeP = 1;
+    return { x: X3, y: Y2, z: Z3, posP, sizeP, idx, c };
+  });
+  pts.sort((a, b) => b.z - a.z); // 奥から描く
+
+  ctx.fillStyle = BG_COLORS[state.bg]; ctx.fillRect(0, 0, cv.width, cv.height);
+  drawMenuText();
+
+  const zd = state.smooth ? state.zoomDist : drawnZoom; // 本家風では描画更新時点のZOOMで描く
+  const centerX = cv.width * 0.64, centerY = cv.height * 0.52, scale = zoomDisp(zd) * 1.40;
+  if (colorFade) {
+    colorFade.t += dt / (1000 / 60);
+    const step = Math.min(8, Math.ceil(colorFade.t / FADE_HOLD));
+    const k = step / 8;
+    dispPair = { main: blendHex(colorFade.from.main, colorFade.to.main, k), accent: blendHex(colorFade.from.accent, colorFade.to.accent, k) };
+    if (step >= 8) { dispPair = colorFade.to; colorFade = null; }
+  }
+  const pair = dispPair;
+  const n = pts.length;
+  for (const p of pts) {
+    // 待機ボールは描かない。静止時は番号判定、遷移中は「出発・到着の両方とも待機」
+    // のスロットだけを省く（片方でも実点なら、形から分かれる／形に吸収される動きとして描く）。
+    const parked = morph
+      ? (p.idx >= morph.fromReal && morph.toFiller[p.idx])
+      : p.idx >= patternReal[state.pattern];
+    if (parked) continue;
+    // 奥行きの明るさ段階（かすみ／パレット切替モード用）。本家モードでは常に1.0
+    let dim = 1.0;
+    // かすみ：中心（z=0）から手前側は通常色のまま、奥側だけ16段階でかすませる。
+    if (state.depthMode !== 0 && p.z > 0) {
+      const t = Math.max(0, Math.min(1, p.z / 1.2));
+      dim = 1.0 - 0.64 * (Math.round(t * 15) / 15);
+    }
+    let palette = p.c === 1 ? pair.accent : pair.main;
+    // パレット切替モード：手前は標準色のまま、奥側だけメイン／アクセントを入れ替える
+    if (state.depthMode === 2 && p.z > 0.05) palette = pair.accent === palette ? pair.main : pair.accent;
+    const spr = getBallSprite(palette, dim);
+    // 大きさは奥行きでボールごとに変える：実効距離 = ZOOM距離 + 0.1×Z（手前は Z が負 → 大きい）。
+    // 係数0.1は、距離85で手前20ドット／奥16ドットに分かれ、距離101では全玉16ドットに揃い、
+    // 距離181では11／10に分かれる、という原作の挙動を同時に満たす近似。
+    let size = 48 * p.sizeP * ballZoom(zd + 0.1 * p.z * 90) * sizeMulCur;
+    let dx = centerX + p.x * scale * p.posP - size / 2;
+    let dy = centerY + p.y * scale * p.posP - size / 2;
+    if (!state.smooth) { // 本家：位置とサイズを本家1ドット（表示の3px）単位に丸める
+      size = Math.max(PX, Math.round(size / PX) * PX);
+      dx = Math.round(dx / PX) * PX; dy = Math.round(dy / PX) * PX;
+    }
+    ctx.drawImage(spr, dx, dy, size, size);
+  }
+}
+
+/* ---------------- 編集モード ----------------
+   3つの軸表示（X/Y/Z）だけを持ち、表示中の軸方向には動かせない。
+   座標は元の単位（1＝1ドット、範囲 ±255）で編集する。 */
+const editor = { active: false, view: "Z", sel: -1, hover: -1, data: null, orig: null, undo: [], redo: [], dragPt: null, scr: [] };
+const EDIT_AX = { X: { h: 2, v: 1, d: 0, label: "X軸表示（横＝Z、縦＝Y）" }, Y: { h: 0, v: 2, d: 1, label: "Y軸表示（横＝X、縦＝Z）" }, Z: { h: 0, v: 1, d: 2, label: "Z軸表示（横＝X、縦＝Y）" } };
+const clampCoord = v => Math.max(-255, Math.min(255, Math.round(v)));
+function gridStep() { const g = Math.round(+$("gridSize").value); return Number.isFinite(g) && g >= 1 ? Math.min(255, g) : 25; }
+function snapCoord(v) { return $("gridSnap").checked ? Math.round(v / gridStep()) * gridStep() : v; }
+
+function snapshot() { editor.undo.push(editor.data.map(p => [...p])); editor.redo = []; }
+function syncEditUI() {
+  $("editPatNum").textContent = state.pattern;
+  for (const v of ["X", "Y", "Z"]) $("btnView" + v).classList.toggle("on", editor.view === v);
+  const d = EDIT_AX[editor.view].d;
+  $("numX").disabled = d === 0; $("numY").disabled = d === 1; $("numZ").disabled = d === 2;
+  const i = editor.sel;
+  if (i >= 0 && editor.data) {
+    const pt = editor.data[i];
+    $("selInfo").textContent = "選択中：#" + i + "（" + EDIT_AX[editor.view].label + "では " + "XYZ"[d] + " は固定）";
+    $("numX").value = Math.round(pt[0]); $("numY").value = Math.round(pt[1]); $("numZ").value = Math.round(pt[2]);
+    $("accChk").checked = pt[3] === 1;
+    $("accChk").disabled = false;
+  } else {
+    $("selInfo").textContent = "ボール未選択（クリックで選択、ドラッグで移動）";
+    $("numX").value = ""; $("numY").value = ""; $("numZ").value = "";
+    $("accChk").checked = false; $("accChk").disabled = true;
+  }
+  $("btnUndo").disabled = editor.undo.length === 0;
+  $("btnRedo").disabled = editor.redo.length === 0;
+}
+function enterEdit() {
+  editor.active = true; editor.view = "Z"; editor.sel = -1; editor.hover = -1;
+  editor.undo = []; editor.redo = []; editor.dragPt = null; morph = null;
+  editor.data = patternPoints[state.pattern].slice(0, patternReal[state.pattern]).map(p => [p[0] * 90, p[1] * 90, p[2] * 90, p[3]]);
+  editor.orig = editor.data.map(p => [...p]);
+  document.querySelector(".panel").style.display = "none";
+  $("editPanel").style.display = "flex";
+  syncEditUI();
+}
+function exitEdit(save) {
+  if (save) {
+    const pts = editor.data.map(([x, y, z, c]) => [x / 90, y / 90, z / 90, c]);
+    patternReal[state.pattern] = pts.length;
+    const full = pts.slice();
+    for (let i = full.length; i < 144; i++) { const s = pts[i % pts.length]; full.push([s[0], s[1], s[2], 0]); }
+    patternPoints[state.pattern] = full;
+    curPts = full.map(p => [...p]);
+    sizeMulCur = patternMul[state.pattern];
+  }
+  editor.active = false; editor.data = null;
+  $("tip").style.display = "none";
+  document.querySelector(".panel").style.display = "flex";
+  $("editPanel").style.display = "none";
+  syncUI();
+}
+$("btnReset").onclick = () => { // 角度とスピードを全部0に、ズームも初期の距離100に戻す
+  state.ax = 0; state.ay = 0; state.az = 0;
+  state.speeds = [0, 0, 0]; state.stoppedAxes = [false, false, false];
+  state.zoomDist = 100; drawnZoom = 100;
+  inertia.x = 0; inertia.y = 0; // 投げの勢いも消す
+  syncUI();
+};
+$("btnEdit").onclick = enterEdit;
+$("btnSaveExit").onclick = () => exitEdit(true);
+$("btnDiscard").onclick = () => exitEdit(false);
+for (const v of ["X", "Y", "Z"]) $("btnView" + v).onclick = () => { editor.view = v; syncEditUI(); };
+$("btnUndo").onclick = () => { if (!editor.undo.length) return; editor.redo.push(editor.data.map(p => [...p])); editor.data = editor.undo.pop(); syncEditUI(); };
+$("btnRedo").onclick = () => { if (!editor.redo.length) return; editor.undo.push(editor.data.map(p => [...p])); editor.data = editor.redo.pop(); syncEditUI(); };
+$("btnResetPts").onclick = () => { // 保存した状態ではなく、初期のテンプレートに戻す（保存状態に戻す場合は破棄で入り直す）
+  snapshot();
+  editor.data = templatePoints[state.pattern].slice(0, templateReal[state.pattern]).map(p => [p[0] * 90, p[1] * 90, p[2] * 90, p[3]]);
+  editor.sel = -1;
+  syncEditUI();
+};
+for (let a = 0; a < 3; a++) {
+  $("num" + "XYZ"[a]).onchange = e => {
+    if (editor.sel < 0) return;
+    snapshot();
+    editor.data[editor.sel][a] = clampCoord(snapCoord(+e.target.value || 0));
+    syncEditUI();
+  };
+}
+$("accChk").onchange = e => { if (editor.sel < 0) return; snapshot(); editor.data[editor.sel][3] = e.target.checked ? 1 : 0; syncEditUI(); };
+
+function drawEditor() {
+  const { h: ha, v: va, d: da, label } = EDIT_AX[editor.view];
+  ctx.fillStyle = "#000"; ctx.fillRect(0, 0, cv.width, cv.height);
+  const s = zoomDisp() * 1.40 / 90; // px per unit
+  const cx0 = cv.width / 2, cy0 = cv.height / 2;
+  ctx.strokeStyle = "#1c2a3a"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, cy0); ctx.lineTo(cv.width, cy0); ctx.moveTo(cx0, 0); ctx.lineTo(cx0, cv.height); ctx.stroke();
+  ctx.fillStyle = "#7db8ff"; ctx.font = "bold 15px monospace"; ctx.textBaseline = "top";
+  ctx.fillText(label, 14, 12);
+  const pair = dispPair;
+  const size = 48 * ballZoom() * patternMul[state.pattern];
+  const order = editor.data.map((p, i) => i).sort((a, b) => editor.data[b][da] - editor.data[a][da]);
+  editor.scr = [];
+  for (const i of order) {
+    const pt = editor.data[i];
+    const sx = cx0 + pt[ha] * s, sy = cy0 + pt[va] * s;
+    editor.scr[i] = { sx, sy, size };
+    const spr = getBallSprite(pt[3] === 1 ? pair.accent : pair.main, 1.0);
+    ctx.drawImage(spr, sx - size / 2, sy - size / 2, size, size);
+    if (i === editor.sel) {
+      ctx.strokeStyle = "#ffd75e"; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(sx, sy, size / 2 + 4, 0, Math.PI * 2); ctx.stroke();
+    } else if (i === editor.hover) {
+      ctx.strokeStyle = "#9fd0ff"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(sx, sy, size / 2 + 3, 0, Math.PI * 2); ctx.stroke();
+    }
+  }
+}
+// 編集モード中のマウス操作（通常の回転ドラッグとは別）
+cv.addEventListener("pointerdown", e => {
+  if (!editor.active) return;
+  if (editor.hover >= 0) {
+    editor.sel = editor.hover;
+    editor.dragPt = { i: editor.sel, x: e.clientX, y: e.clientY, orig: [...editor.data[editor.sel]], snapped: false };
+    cv.setPointerCapture(e.pointerId);
+    syncEditUI();
+  }
+});
+cv.addEventListener("pointermove", e => {
+  if (!editor.active) return;
+  const rect = cv.getBoundingClientRect();
+  const mx = (e.clientX - rect.left) * cv.width / rect.width, my = (e.clientY - rect.top) * cv.height / rect.height;
+  if (editor.dragPt) {
+    const { h: ha, v: va } = EDIT_AX[editor.view];
+    const s = zoomDisp() * 1.40 / 90;
+    const i = editor.dragPt.i;
+    if (!editor.dragPt.snapped) { snapshot(); editor.dragPt.snapped = true; }
+    editor.data[i][ha] = clampCoord(snapCoord(editor.dragPt.orig[ha] + (e.clientX - editor.dragPt.x) / rect.width * cv.width / s));
+    editor.data[i][va] = clampCoord(snapCoord(editor.dragPt.orig[va] + (e.clientY - editor.dragPt.y) / rect.height * cv.height / s));
+    syncEditUI();
+    return;
+  }
+  let best = -1, bestD = 1e9;
+  editor.scr.forEach((sc, i) => { if (!sc) return; const d = Math.hypot(sc.sx - mx, sc.sy - my); if (d < sc.size / 2 + 2 && d < bestD) { bestD = d; best = i; } });
+  editor.hover = best;
+  const tip = $("tip");
+  if (best >= 0) {
+    const pt = editor.data[best];
+    tip.textContent = "#" + best + "  x=" + Math.round(pt[0]) + " y=" + Math.round(pt[1]) + " z=" + Math.round(pt[2]) + (pt[3] === 1 ? " ◆アクセント" : "");
+    const stage = cv.parentElement.getBoundingClientRect();
+    tip.style.left = (e.clientX - stage.left + 14) + "px";
+    tip.style.top = (e.clientY - stage.top + 10) + "px";
+    tip.style.display = "block";
+    cv.style.cursor = "pointer";
+  } else { tip.style.display = "none"; cv.style.cursor = "default"; }
+});
+cv.addEventListener("pointerup", () => { if (editor.active) editor.dragPt = null; });
+cv.addEventListener("pointerleave", () => { if (editor.active) { $("tip").style.display = "none"; editor.hover = -1; } });
+
+syncUI();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
