@@ -551,13 +551,11 @@ function drawMenuText() {
 
 /* 回転の進み方：原作は毎フレーム「角度 += 速度」。SPEED 1 = 1フレームに+1、
    SPEED 2 = +2。つまり角速度は SPEED×60 単位/秒で、1周256フレーム≒4.3秒。
-   本家風（なめらか無効）では 1/60 秒ごとの固定ステップで角度を進める
-   （時刻の揺れでステップ幅がブレると残像っぽく見えるため）。
-   なめらか有効では時計ベースで連続的に進める。 */
+   両モードとも時計ベースで毎フレーム進める。本家風の粗さは、進め方ではなく
+   描画時の量子化（角度の整数ステップ化と座標の整数丸め）で再現する。 */
 const PX = 3; // 表示Canvas 768px ÷ 本家 256px ＝ 本家1ドットの大きさ
 let lastTime = 0;
-let rotAcc = 0; // 本家風の描画更新（30Hz）用アキュムレータ（ms）
-let drawnZoom = 100; // 本家風で「画面に出ている」ZOOM距離（描画更新のタイミングでのみ変わる）
+let drawnZoom = 100; // 画面に出ているZOOM距離（毎フレーム state.zoomDist に追随）
 function frame(t) {
   requestAnimationFrame(frame);
   if (editor.active) { drawEditor(); lastTime = t; return; }
@@ -566,34 +564,17 @@ function frame(t) {
   if (dt > 100) dt = 100;
   if (!drag) {
     // SPEEDもSTOPも軸ごとに独立：止まっていない軸だけが、それぞれの速度で回る（実機準拠 SPEED×60単位/秒、1周≒4.3秒）
-    if (state.smooth) {
-      const k = 60 * dt / 1000;
-      if (!state.stoppedAxes[0]) state.ax += state.speeds[0] * k;
-      if (!state.stoppedAxes[1]) state.ay += state.speeds[1] * k;
-      if (!state.stoppedAxes[2]) state.az += state.speeds[2] * k;
-      // 投げの勢い（別枠の上乗せ、摩擦で減衰）。STOP中の軸は勢いごと止める
-      if (!state.stoppedAxes[0]) state.ax += inertia.x * dt / 1000; else inertia.x = 0;
-      if (!state.stoppedAxes[1]) state.ay += inertia.y * dt / 1000; else inertia.y = 0;
-      decayInertia(dt);
-    } else {
-      // 本家風：本家の3D ROOMは描画の更新が2フレームに1回（30Hz）しかない。
-      // 角度カウンタ自体は毎フレーム進むのに、画面に出るのは2フレーム分まとめて。
-      // だから1回のジャンプが2倍の大きさになり、ガタガタした動きになる。
-      rotAcc += dt;
-      const ticks = Math.floor(rotAcc * 30 / 1000);
-      if (ticks > 0) {
-        rotAcc -= ticks * 1000 / 30;
-        if (!state.stoppedAxes[0]) state.ax += state.speeds[0] * 2 * ticks;
-        if (!state.stoppedAxes[1]) state.ay += state.speeds[1] * 2 * ticks;
-        if (!state.stoppedAxes[2]) state.az += state.speeds[2] * 2 * ticks;
-        // 投げの勢いも本家風では整数SPEEDに丸めて乗せる（減速が段階的になる）
-        if (!state.stoppedAxes[0]) state.ax += Math.round(inertia.x / 60) * 2 * ticks; else inertia.x = 0;
-        if (!state.stoppedAxes[1]) state.ay += Math.round(inertia.y / 60) * 2 * ticks; else inertia.y = 0;
-        decayInertia(ticks * 1000 / 30);
-        drawnZoom = state.zoomDist; // ZOOMの見た目も描画更新のタイミングでだけ変わる
-      }
-    }
-  } else rotAcc = 0;
+    // 更新は両モードとも毎フレーム（60Hz）。本家風の粗さは描画時の量子化で出す。
+    const k = 60 * dt / 1000;
+    if (!state.stoppedAxes[0]) state.ax += state.speeds[0] * k;
+    if (!state.stoppedAxes[1]) state.ay += state.speeds[1] * k;
+    if (!state.stoppedAxes[2]) state.az += state.speeds[2] * k;
+    // 投げの勢い（別枠の上乗せ、摩擦で減衰）。STOP中の軸は勢いごと止める
+    if (!state.stoppedAxes[0]) state.ax += inertia.x * dt / 1000; else inertia.x = 0;
+    if (!state.stoppedAxes[1]) state.ay += inertia.y * dt / 1000; else inertia.y = 0;
+    decayInertia(dt);
+    drawnZoom = state.zoomDist;
+  }
   // ZOOM長押し（本家準拠：押している間、毎フレーム±1）
   {
     const dir = (zoomHeld.out ? 1 : 0) - (zoomHeld.in ? 1 : 0);
@@ -670,7 +651,7 @@ function frame(t) {
   ctx.fillStyle = BG_COLORS[state.bg]; ctx.fillRect(0, 0, cv.width, cv.height);
   drawMenuText();
 
-  const zd = state.smooth ? state.zoomDist : drawnZoom; // 本家風では描画更新時点のZOOMで描く
+  const zd = state.smooth ? state.zoomDist : drawnZoom; // drawnZoom は毎フレーム追随する
   const centerX = cv.width * 0.64, centerY = cv.height * 0.52, scale = zoomDisp(zd) * 1.40;
   if (colorFade) {
     colorFade.t += dt / (1000 / 60);
