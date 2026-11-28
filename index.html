@@ -656,11 +656,13 @@ function frame(t) {
       X3 = Math.round(X3 * 90) / 90; Y2 = Math.round(Y2 * 90) / 90; Z3 = Math.round(Z3 * 90) / 90;
     }
     // 位置のパースは「なめらか」に組み込む：
-    // オフ（本家風）＝原作と同じ平行投影（位置パースなし）、
-    // オン＝弱い透視投影がかかる。
+    // オフ（本家風）＝原作の弱い透視投影。投影の除数は (距離+13.4+Z/18.8) で、
+    // 距離100・球の前後では画面位置の倍率が約 ±4% 変わる（前後比 約1.085）。
+    // オン＝より強い透視投影がかかる。
     // ボールの大きさは両モードともボールごとの奥行きで変わる（手前が大きく、奥が小さい。
     // 原作はタイル切替式で、境界の距離では2サイズが混在する）。
-    const posP = state.smooth ? 8 / (8 + Z3) : 1;
+    const zdp = state.smooth ? state.zoomDist : drawnZoom;
+    const posP = state.smooth ? 8 / (8 + Z3) : (zdp + 13.4) / (zdp + 13.4 + Z3 * 90 / 18.8);
     const sizeP = 1;
     return { x: X3, y: Y2, z: Z3, posP, sizeP, idx, c };
   });
